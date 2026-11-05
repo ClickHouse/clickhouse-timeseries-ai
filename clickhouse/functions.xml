@@ -1,0 +1,43 @@
+<functions>
+    <function>
+        <type>executable_pool</type>
+        <name>aiForecast</name>
+        <return_type>Array(Tuple(expected Float64, lower_bound Float64, upper_bound Float64, quantiles Array(Tuple(level Float64, value Float64))))</return_type>
+        <argument><name>values</name><type>Array(Float64)</type></argument>
+        <argument><name>horizon</name><type>UInt32</type></argument>
+        <format>JSONEachRow</format>
+        <command>timeseries_udf forecast</command>
+        <execute_direct>true</execute_direct>
+        <pool_size>2</pool_size>
+        <command_read_timeout>195000</command_read_timeout>
+        <max_command_execution_time>200</max_command_execution_time>
+    </function>
+    <function>
+        <type>executable_pool</type>
+        <name>aiForecastMultivariate</name>
+        <return_type>Array(Array(Tuple(expected Float64, lower_bound Float64, upper_bound Float64, quantiles Array(Tuple(level Float64, value Float64)))))</return_type>
+        <argument><name>targets</name><type>Array(Array(Float64))</type></argument>
+        <argument><name>horizon</name><type>UInt32</type></argument>
+        <argument><name>past_covariates</name><type>Array(Array(Float64))</type></argument>
+        <argument><name>future_covariates</name><type>Array(Array(Float64))</type></argument>
+        <format>JSONEachRow</format>
+        <command>timeseries_udf multivariate</command>
+        <execute_direct>true</execute_direct>
+        <pool_size>2</pool_size>
+        <command_read_timeout>195000</command_read_timeout>
+        <max_command_execution_time>200</max_command_execution_time>
+    </function>
+    <function>
+        <type>executable_pool</type>
+        <name>aiDetectAnomalies</name>
+        <return_type>Array(Tuple(expected Nullable(Float64), lower_bound Nullable(Float64), upper_bound Nullable(Float64), anomaly_score Nullable(Float64), is_anomaly UInt8))</return_type>
+        <argument><name>values</name><type>Array(Float64)</type></argument>
+        <argument><name>options</name><type>String</type></argument>
+        <format>JSONEachRow</format>
+        <command>timeseries_udf anomalies</command>
+        <execute_direct>true</execute_direct>
+        <pool_size>2</pool_size>
+        <command_read_timeout>195000</command_read_timeout>
+        <max_command_execution_time>200</max_command_execution_time>
+    </function>
+</functions>

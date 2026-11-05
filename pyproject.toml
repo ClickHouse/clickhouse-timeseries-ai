@@ -1,0 +1,22 @@
+[project]
+name = "clickhouse-timeseries-ai"
+version = "0.1.0"
+description = "Local TimesFM forecasting and anomaly detection from ClickHouse SQL"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "timesfm[torch]==3.0.2",
+  "torch==2.14.1",
+  "fastapi==0.121.0",
+  "uvicorn>=0.34,<1",
+]
+
+[dependency-groups]
+dev = ["httpx>=0.28,<1"]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform != 'darwin'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

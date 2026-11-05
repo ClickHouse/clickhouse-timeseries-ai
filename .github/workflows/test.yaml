@@ -1,0 +1,13 @@
+name: Tests
+on: [push, pull_request]
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.5"
+      - run: uv sync --frozen --python 3.12
+      - run: uv run --frozen python tests/run.py
+      - run: docker compose config --quiet
