@@ -1,10 +1,11 @@
 [project]
 name = "clickhouse-timeseries-ai"
 version = "0.1.0"
-description = "Local TimesFM forecasting and anomaly detection from ClickHouse SQL"
+description = "Time Series Foundation Model forecasting and anomaly detection with ClickHouse"
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "timesfm[torch]==3.0.2",
+  "timestral @ https://github.com/mistralai/timestral/archive/a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff.tar.gz",
   "torch==2.14.1",
   "fastapi==0.121.0",
   "uvicorn>=0.34,<1",

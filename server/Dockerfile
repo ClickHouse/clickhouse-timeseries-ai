@@ -7,4 +7,4 @@ RUN uv sync --frozen --no-dev
 COPY server/ ./server/
 COPY clickhouse/udf.py tests/smoke.py ./
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
-CMD ["python", "server/serve.py"]
+ENTRYPOINT ["python", "server/serve.py"]

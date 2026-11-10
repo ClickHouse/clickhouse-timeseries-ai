@@ -128,6 +128,16 @@ class EngineTests(unittest.TestCase):
         self.engine.run(body, "anomalies")
         self.assertNotIn(999, self.model.calls[0]["targets"][1])
 
+    def test_udf_model_selection_from_environment(self):
+        response = {"predictions": [self.model.predict({"targets": [[10.0] * 8]}, 2)]}
+        with patch.dict("os.environ", {"TIMESERIES_MODEL": "timestral-209m"}), patch(
+            "urllib.request.build_opener"
+        ) as opener:
+            opener.return_value.open.return_value.__enter__.return_value.read.return_value = json.dumps(response).encode()
+            evaluate({"values": [10.0] * 8, "horizon": 2}, "forecast", "http://localhost:8091", "key")
+        request = opener.return_value.open.call_args.args[0]
+        self.assertEqual(json.loads(request.data)["model"], "timestral-209m")
+
 
 if __name__ == "__main__":
     unittest.main()

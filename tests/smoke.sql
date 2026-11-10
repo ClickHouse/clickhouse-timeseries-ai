@@ -3,7 +3,7 @@ WITH aiForecast(arrayMap(x -> 10.0 + sin(x / 5.0), range(64)), toUInt32(4)) AS p
 SELECT throwIf(length(prediction) != 4 OR arrayExists(p -> NOT isFinite(p.expected) OR p.lower_bound > p.expected OR p.expected > p.upper_bound, prediction), 'invalid forecast');
 
 WITH aiForecast(arrayMap(x -> 10.0 + sin(x / 5.0), range(64)), toUInt32(4)) AS prediction
-SELECT throwIf(arrayExists(p -> length(p.quantiles) != 9
+SELECT throwIf(arrayExists(p -> length(p.quantiles) NOT IN (9, 21)
     OR aiForecastQuantile(p, 0.5) != p.expected
     OR aiForecastQuantile(p, 0.8) < p.expected
     OR aiForecastInterval(p, 0.8).lower_bound != p.lower_bound

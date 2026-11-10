@@ -6,7 +6,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from engine import Engine
-from serve import MAX_BODY, create_app
+from serve import MAX_BODY, create_app, main
 from test_engine import RecordingModel
 
 
@@ -84,3 +84,38 @@ class ServerTests(unittest.TestCase):
                 thread.join(timeout=5)
         self.assertFalse(thread.is_alive())
         self.assertEqual(responses[0].status_code, 200)
+
+    def test_timestral_http_uses_selected_model_name(self):
+        with patch.dict(os.environ, {"TIMESERIES_API_KEY": "test-key"}):
+            client = TestClient(create_app(Engine(self.model, "b" * 40, "timestral-209m")))
+        self.assertEqual(client.post("/v1/timeseries/forecast", json=self.body,
+                                     headers=self.headers).status_code, 400)
+        self.body["model"] = "timestral-209m"
+        for operation in ("forecast", "anomalies"):
+            response = client.post("/v1/timeseries/" + operation, json=self.body, headers=self.headers)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["model"], "timestral-209m")
+            self.assertEqual(response.json()["model_revision"], "b" * 40)
+
+
+class CommandLineTests(unittest.TestCase):
+    def test_startup_selection(self):
+        for args, selected in (([], "timesfm-3.0"), (["--model", "timesfm-3.0"], "timesfm-3.0"),
+                               (["--model", "timestral-209m"], "timestral-209m")):
+            with self.subTest(args=args), patch("model.load_engine") as loader, patch(
+                "serve.create_app", return_value="app"
+            ) as factory, patch("uvicorn.run") as run, patch.dict(os.environ, {}, clear=True):
+                main(args)
+                loader.assert_called_once_with(selected)
+                factory.assert_called_once_with(loader.return_value)
+                run.assert_called_once_with("app", host="127.0.0.1", port=8091)
+
+    def test_invalid_model_does_not_load_weights(self):
+        import contextlib
+        import io
+
+        with patch("model.load_engine") as loader, contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as exc:
+                main(["--model", "other"])
+        self.assertEqual(exc.exception.code, 2)
+        loader.assert_not_called()

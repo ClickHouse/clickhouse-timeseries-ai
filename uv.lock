@@ -64,6 +64,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "timesfm", extra = ["torch"] },
+    { name = "timestral" },
     { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
     { name = "uvicorn" },
@@ -78,6 +79,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = "==0.121.0" },
     { name = "timesfm", extras = ["torch"], specifier = "==3.0.2" },
+    { name = "timestral", url = "https://github.com/mistralai/timestral/archive/a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff.tar.gz" },
     { name = "torch", marker = "sys_platform != 'darwin'", specifier = "==2.14.1", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torch", marker = "sys_platform == 'darwin'", specifier = "==2.14.1" },
     { name = "uvicorn", specifier = ">=0.34,<1" },
@@ -664,6 +666,28 @@ wheels = [
 torch = [
     { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+]
+
+[[package]]
+name = "timestral"
+version = "1.0.0"
+source = { url = "https://github.com/mistralai/timestral/archive/a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff.tar.gz" }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "safetensors" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
+    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+]
+sdist = { hash = "sha256:be734f502f88e95b138558d765f3ad3b3ac8d2662270f9cf8b03138359828150" }
+
+[package.metadata]
+requires-dist = [
+    { name = "huggingface-hub", specifier = ">=0.23" },
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "safetensors", specifier = ">=0.4" },
+    { name = "torch", specifier = ">=2.4" },
 ]
 
 [[package]]

@@ -35,3 +35,21 @@ for expression in unsupported:
     else:
         raise AssertionError("SQL helper accepted an unsupported request: " + expression)
 print("SQL quantile helpers: native selection and unsupported-request rejection OK")
+
+# Timestral's extra native tails use the same tuple and helpers, not interpolation.
+levels = [0.01, 0.05, *[i / 20 for i in range(2, 19)], 0.95, 0.99]
+native_quantiles = ", ".join(f"tuple({level}, {level * 100})" for level in levels)
+point = f"""CAST(tuple(50., 10., 90., [{native_quantiles}]),
+    'Tuple(expected Float64, lower_bound Float64, upper_bound Float64,
+        quantiles Array(Tuple(level Float64, value Float64)))')"""
+assert query("aiForecastQuantile(point, 0.01)") == 1
+assert query("aiForecastQuantile(point, 0.95)") == 95
+assert query("aiForecastInterval(point, 0.9)") == {"lower_bound": 5, "upper_bound": 95}
+assert query("aiForecastInterval(point, 0.98)") == {"lower_bound": 1, "upper_bound": 99}
+try:
+    query("aiForecastInterval(point, 0.95)")
+except urllib.error.HTTPError as exc:
+    assert "Requested quantile is not available" in exc.read().decode()
+else:
+    raise AssertionError("SQL helper interpolated unavailable Timestral quantiles")
+print("SQL quantile helpers: Timestral native 90%/98% intervals OK")

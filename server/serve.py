@@ -1,4 +1,4 @@
-"""Authenticated local HTTP service for TimesFM forecasting and scoring."""
+"""Authenticated local HTTP service for time-series forecasting and scoring."""
 
 import hmac
 import json
@@ -57,8 +57,20 @@ def create_app(engine):
     return app
 
 
-if __name__ == "__main__":
-    import uvicorn
-    from model import load_engine
+def main(argv=None):
+    import argparse
+    from model import MODEL_NAMES, load_engine
 
-    uvicorn.run(create_app(load_engine()), host=os.environ.get("TIMESERIES_HOST", "127.0.0.1"), port=8091)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model", choices=MODEL_NAMES, default="timesfm-3.0",
+                        help="checkpoint to serve (default: %(default)s)")
+    args = parser.parse_args(argv)
+
+    import uvicorn
+
+    uvicorn.run(create_app(load_engine(args.model)),
+                host=os.environ.get("TIMESERIES_HOST", "127.0.0.1"), port=8091)
+
+
+if __name__ == "__main__":
+    main()
