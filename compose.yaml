@@ -5,10 +5,14 @@ services:
     build:
       context: .
       dockerfile: server/Dockerfile
+    command: ["--model", "${TIMESERIES_MODEL:-timesfm-3.0}"]
     environment:
       TIMESERIES_API_KEY: ${TIMESERIES_API_KEY:-local-evaluation-only}
       TIMESFM_REVISION: ${TIMESFM_REVISION:-43046b85ec22d584a13f8098c2ed39c889e129c2}
       TIMESFM_DEVICE: cpu
+      TIMESTRAL_REVISION: ${TIMESTRAL_REVISION:-9874d252ab0aae16f7f7c999f98f98d6ad7d8365}
+      TIMESTRAL_DEVICE: cpu
+      TIMESERIES_MODEL: ${TIMESERIES_MODEL:-timesfm-3.0}
       TIMESERIES_HOST: 0.0.0.0
       HF_HOME: /cache/huggingface
     ports:
@@ -32,6 +36,7 @@ services:
     environment:
       CLICKHOUSE_SKIP_USER_SETUP: "1"
       TIMESERIES_URL: http://model:8091
+      TIMESERIES_MODEL: ${TIMESERIES_MODEL:-timesfm-3.0}
       TIMESERIES_API_KEY: ${TIMESERIES_API_KEY:-local-evaluation-only}
     ports:
       - "127.0.0.1:${CLICKHOUSE_PORT:-8125}:8123"

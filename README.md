@@ -1,14 +1,14 @@
 # Time-series foundation models in ClickHouse
 
-Run TimesFM 3.0 locally and call it from ClickHouse SQL for zero-shot forecasting,
+Run TimesFM 3.0 or Timestral-209M locally and call it from ClickHouse SQL for zero-shot forecasting,
 multivariate forecasting, and historical anomaly detection. No per-series training,
 cloud account, internal gateway, or hosted inference service is required.
 
 This is a local evaluation demo, not a production service. Google's downloaded
-TimesFM 3.0 weights have **non-commercial, non-production restrictions**. Read the
-[checkpoint license](https://huggingface.co/google/timesfm-3.0-pytorch/blob/43046b85ec22d584a13f8098c2ed39c889e129c2/LICENSE)
-before downloading or using them. The code license in this repository does not
-change the model-weight license.
+TimesFM 3.0 weights have **non-commercial, non-production restrictions**. Read the [checkpoint license](https://huggingface.co/google/timesfm-3.0-pytorch/blob/43046b85ec22d584a13f8098c2ed39c889e129c2/LICENSE) before downloading or using them.
+The code license in this repository does not change the model-weight license.
+Timestral weights have a separate [Modified MIT license](https://huggingface.co/mistralai/Timestral-209M/blob/9874d252ab0aae16f7f7c999f98f98d6ad7d8365/LICENSE).
+Review the applicable license before downloading or using either checkpoint.
 
 ## Quick start
 
@@ -47,15 +47,31 @@ All three executable UDFs and both SQL selection helpers are registered on first
 startup. You do not need to create them manually. Inputs in these examples are synthetic, and inference
 results come from the real pretrained model, not stored outputs.
 
+### Select the model
+
+One model is loaded per server process, TimesFM by default.
+To select a Timestral model (after reviewing the Timestral weight license) switch the Compose stack with:
+
+```sh
+TIMESERIES_MODEL=timestral-209m docker compose up --build -d --wait --wait-timeout 1200
+```
+
+Set `TIMESERIES_MODEL=timestral-209m` in `.env` to persist the selection. Compose
+passes it as the model server's `--model` command-line argument and sets the same
+model name for ClickHouse's UDF client. To switch back, set it to `timesfm-3.0` and
+recreate the services with the same command. Cached weights for both models are
+retained. SQL function names, arguments, output tuple types, and anomaly options
+do not change; there is no per-query model selection or trailing params argument.
+
 ## How it works
 
 ```text
-ClickHouse SQL → Python executable UDF → local HTTP service → TimesFM 3.0
+ClickHouse SQL → Python executable UDF → local HTTP service → selected model
               ← typed arrays/tuples   ← JSON predictions   ← quantiles
 ```
 
 SQL constructs ordered numerical arrays. The UDF sends one HTTP request per row.
-The HTTP service validates inputs, runs the model, and returns all nine native
+The HTTP service validates inputs, runs the model, and returns all native
 quantiles, along with median and q10/q90 convenience fields. Historical scoring
 forecasts held-out observations from earlier
 history, then compares the forecasts with actual values. It does not train a model.
@@ -63,7 +79,7 @@ history, then compares the forecasts with actual values. It does not train a mod
 | File | Purpose |
 |---|---|
 | `compose.yaml` | CPU model service, ClickHouse, health checks, and persistent volumes |
-| `server/model.py` | Pinned TimesFM adapter and quantile mapping |
+| `server/model.py` | Pinned TimesFM and Timestral adapters and quantile mapping |
 | `server/engine.py` | Input bounds, forecasts, causal scoring, and usage counts |
 | `server/serve.py` | Bearer authentication, body limit, and one active request |
 | `clickhouse/udf.py` | JSONEachRow HTTP client and named tuple output |
@@ -83,7 +99,9 @@ aiDetectAnomalies(values, options_json)
 `values` is `Array(Float64)`; `horizon` is `UInt32`. Forecast output is an array
 of named tuples `(expected, lower_bound, upper_bound, quantiles)`, one tuple per
 future step. `quantiles` is `Array(Tuple(level Float64, value Float64))` and contains
-all nine native levels, q10 through q90, returned by the same model call.
+all native levels returned by the same model call: nine levels (q10 through q90)
+for TimesFM, or 21 for Timestral (q1, q5, q10 through q90 in steps of five, q95, q99).
+The convenience fields remain the median and q10/q90 for either model.
 
 Given one forecast step `point`, `aiForecastQuantile(point, 0.8)` selects q80.
 `aiForecastInterval(point, 0.6)` returns named q20/q80 bounds for a nominal 60%
@@ -91,6 +109,8 @@ interval. Use `arrayMap(p -> aiForecastQuantile(p, 0.8), forecast)` to select a
 trajectory from a stored or returned forecast array. Neither helper makes a model
 request. They require native levels and reject unsupported requests, including a
 95% interval; there is no interpolation, extrapolation, or implicit calibration.
+Timestral additionally supports native 90% (q5/q95) and 98% (q1/q99) intervals;
+95% coverage still requires unavailable q2.5/q97.5 and is rejected.
 The helpers use a small numerical tolerance when matching levels so arithmetic
 such as `(1 - 0.8) / 2` can select q10.
 
@@ -108,8 +128,20 @@ string; use `'{}'` for defaults:
 |---|---|---|
 | `warmup` | 32 | Initial context-only observations, minimum 8 |
 | `horizon` | 16 | Number of observations forecast in each held-out window |
-| `only_last_n` | 0 | Score only the last N observations; 0 scores all after warmup |
+| `score_last_n` | 0 | Score only the last N observations; 0 scores all after warmup |
 | `threshold` | 1.0 | Flag scores strictly greater than this positive value |
+| `past_covariates` | `[]` | Feature arrays available only before each scored window |
+| `future_covariates` | `[]` | Feature arrays known in advance, including the scored window |
+
+`score_last_n` selects which observations receive scores; it does not truncate
+the preceding model history. Covariates are nested numeric arrays, with one
+inner array per feature and the same length as `values`. The service supplies
+past-only features through each forecast origin and known-future features
+through the end of that scored window. Held-out target values are not model
+inputs. The function returns one flat array of anomaly tuples.
+
+SQL can build covariate options with `toJSONString` on a named tuple; see
+the calendar-aware request in `tests/smoke.sql`.
 
 The bounds are q10 and q90: a **nominal 80% prediction interval**, not a calibrated
 confidence guarantee. The anomaly score divides the absolute forecast error by
@@ -142,10 +174,15 @@ curl --fail-with-body -sS http://127.0.0.1:8091/v1/timeseries/forecast \
 ```
 
 Each `inputs` entry has `targets` shaped `[target][history_step]`, plus optional
-`past_covariates` and `future_covariates`. Use `"model": "timesfm-3.0"`.
+`past_covariates` and `future_covariates`. The required `model` field must match
+the server's startup selection: `"timesfm-3.0"` or `"timestral-209m"`. For the
+Timestral server, replace the model value in `examples/forecast.json` when making
+a direct HTTP request. The other request and response fields are unchanged.
 For anomaly requests, known-future covariates cover the submitted history only.
-Anomaly options use the same names as the SQL JSON options and go at the request
-top level. The median and convenience bounds are `[target][step]` matrices.
+Scoring options (`score_last_n`, `warmup`, `horizon`, and `threshold`) use the
+same names as the SQL JSON options and go at the request top level. Covariates
+belong inside each `inputs` entry. The median and convenience bounds are
+`[target][step]` matrices.
 Forecast predictions also include `quantile_levels` and a numeric `quantiles`
 array shaped `[target][step][quantile]`. Anomaly predictions retain their original
 shape and do not expose the quantile cube. Responses identify the exact
@@ -189,6 +226,12 @@ The checkpoint pin defaults to `43046b85ec22d584a13f8098c2ed39c889e129c2`.
 Changing `TIMESFM_REVISION` requires another full 40-character commit SHA, a
 compatible checkpoint, and a review of its license. The checkpoint is downloaded
 from Hugging Face; weights are not included in this repository or its images.
+Timestral defaults to checkpoint revision `9874d252ab0aae16f7f7c999f98f98d6ad7d8365`
+from `mistralai/Timestral-209M`, controlled by `TIMESTRAL_REVISION` with the same
+full-SHA validation. Its inference package is pinned separately to source commit
+`a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff`. Only the selected checkpoint is
+downloaded. Both adapters disable non-negative clipping and symmetric averaging,
+preserving support for signed series without an extra mirrored inference pass.
 
 ## Run the model on the host instead
 
@@ -202,6 +245,21 @@ export TIMESERIES_API_KEY=local-evaluation-only
 uv run --frozen python server/serve.py
 ```
 
+For Timestral instead (after reviewing its weight license):
+
+```sh
+export TIMESTRAL_REVISION=9874d252ab0aae16f7f7c999f98f98d6ad7d8365
+export TIMESTRAL_DEVICE=cpu
+export TIMESERIES_API_KEY=local-evaluation-only
+uv run --frozen python server/serve.py --model timestral-209m
+```
+
+Use `--model timesfm-3.0` to select TimesFM explicitly, or `--help` to list
+choices. The host server selects its model only through this argument; it does
+not read `TIMESERIES_MODEL`. Set `TIMESERIES_MODEL` to the matching name in any
+separately launched UDF client or smoke-test process. `TIMESFM_DEVICE` and
+`TIMESTRAL_DEVICE` configure their respective host adapters; Compose pins both to CPU.
+
 This starts the model server only, on loopback port 8091. It does not start or
 reconfigure ClickHouse. The default Compose path runs both components together.
 Linux installs use CPU-only PyTorch wheels; this lockfile is for CPU evaluation,
@@ -209,7 +267,8 @@ not a CUDA deployment. On macOS, the native PyTorch package also runs on CPU her
 
 ## Tests
 
-Unit tests do not download weights:
+Unit tests do not download pretrained weights. They test both adapters, startup
+selection, and a tiny Timestral model initialized with synthetic weights:
 
 ```sh
 uv sync --frozen
@@ -229,7 +288,8 @@ PYTHONPATH=clickhouse uv run --frozen python tests/smoke.py
 ```
 
 The host command uses port 8091 and key `local-evaluation-only` by default. Override
-`TIMESERIES_URL` and `TIMESERIES_API_KEY` for custom settings; it does not load `.env`.
+`TIMESERIES_URL`, `TIMESERIES_API_KEY`, and `TIMESERIES_MODEL` for custom settings;
+it does not load `.env`. For Timestral, set `TIMESERIES_MODEL=timestral-209m`.
 Then run the end-to-end SQL assertions:
 
 ```sh
@@ -237,9 +297,10 @@ docker compose exec -T clickhouse clickhouse-client --multiquery < tests/smoke.s
 docker compose exec -T -e TIMESERIES_CLICKHOUSE_URL=http://127.0.0.1:8123 clickhouse python3 - < tests/check_helpers.py
 ```
 
-The SQL smoke prints five zeroes on success. It checks forecasts, native quantile
+The SQL smoke prints six zeroes on success. It checks forecasts, native quantile
 and interval selection, multivariate
-forecasts with covariates, trailing anomaly scoring, and historical scoring.
+forecasts with covariates, trailing anomaly scoring, historical scoring, and
+anomaly scoring with past-only and known-future features.
 These are functional checks, not accuracy or performance benchmarks. GitHub
 Actions runs unit tests and validates Compose configuration without downloading
 model weights.
@@ -279,5 +340,7 @@ and Hugging Face. For UDF failures, inspect `docker compose logs model clickhous
 
 The demo code is MIT-licensed; see [LICENSE](LICENSE). TimesFM, PyTorch, ClickHouse,
 and other dependencies retain their own licenses. In particular, the TimesFM 3.0
-checkpoint's non-commercial, non-production terms apply independently. This demo
-does not include Timestral or register functions in ClickHouse Cloud.
+checkpoint's non-commercial, non-production terms apply independently. Timestral's
+inference code is Apache-2.0-licensed, while its weights have the separate Modified
+MIT terms linked above. This demo does not register
+functions in ClickHouse Cloud.

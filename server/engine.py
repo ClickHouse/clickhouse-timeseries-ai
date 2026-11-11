@@ -40,7 +40,7 @@ def validate(body, operation, model_name=MODEL):
         raise ValueError(f"model must be {model_name}")
     allowed = {"model", "inputs", "horizon"}
     if operation == "anomalies":
-        allowed |= {"only_last_n", "warmup", "threshold"}
+        allowed |= {"score_last_n", "warmup", "threshold"}
     if set(body) - allowed:
         raise ValueError("unknown request field")
     horizon = integer(body.get("horizon", 16), "horizon", 1, MAX_HORIZON)
@@ -49,7 +49,7 @@ def validate(body, operation, model_name=MODEL):
         raise ValueError(f"inputs must contain 1 to {MAX_INPUTS} series")
     count = work = windows = 0
     warmup = integer(body.get("warmup", 32), "warmup", 8, MAX_POINTS - 1)
-    last = integer(body.get("only_last_n", 0), "only_last_n", 0, MAX_POINTS)
+    last = integer(body.get("score_last_n", 0), "score_last_n", 0, MAX_POINTS)
     threshold = body.get("threshold", 1.0)
     if type(threshold) not in (int, float) or not math.isfinite(threshold) or threshold <= 0:
         raise ValueError("threshold must be a finite positive number")
@@ -71,7 +71,7 @@ def validate(body, operation, model_name=MODEL):
             if size <= warmup:
                 raise ValueError("history must be longer than warmup")
             if last and last > size - warmup:
-                raise ValueError("only_last_n must leave at least warmup observations")
+                raise ValueError("score_last_n must leave at least warmup observations")
             start = size - last if last else warmup
             for offset in range(start, size, horizon):
                 work += offset * channels

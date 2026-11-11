@@ -34,6 +34,8 @@ levels = forecast["predictions"][0]["quantile_levels"]
 assert all(q in levels for q in (0.1, 0.5, 0.9))
 if model == "timesfm-3.0":
     assert levels == [i / 10 for i in range(1, 10)]
+elif model == "timestral-209m":
+    assert levels == [0.01, 0.05, *[i / 20 for i in range(2, 19)], 0.95, 0.99]
 assert len(forecast["predictions"][0]["quantiles"][0][0]) == len(levels)
 multi = request("forecast", horizon=4, inputs=[{
     "targets": [values, [2 * x for x in values]],
@@ -42,7 +44,7 @@ multi = request("forecast", horizon=4, inputs=[{
 }])
 assert len(multi["predictions"][0]["expected"]) == 2
 values[60] = 100
-anomalies = request("anomalies", horizon=4, only_last_n=4, inputs=[{"targets": [values]}])
+anomalies = request("anomalies", horizon=4, score_last_n=4, inputs=[{"targets": [values]}])
 prediction = anomalies["predictions"][0]
 assert prediction["expected"][0][:60] == [None] * 60
 assert prediction["is_anomaly"][0][60]

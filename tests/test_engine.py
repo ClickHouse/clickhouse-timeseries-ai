@@ -54,7 +54,7 @@ class EngineTests(unittest.TestCase):
 
     def test_trailing_window_and_partial_final_window(self):
         body = self.body()
-        body["only_last_n"] = 5
+        body["score_last_n"] = 5
         result = self.engine.run(body, "anomalies")["predictions"][0]
         self.assertEqual([len(c["targets"][0]) for c in self.model.calls], [35, 39])
         self.assertEqual(result["expected"][0][:35], [None] * 35)
@@ -64,7 +64,7 @@ class EngineTests(unittest.TestCase):
         mutations = [
             lambda b: b.update(horizon=0),
             lambda b: b.update(horizon=True),
-            lambda b: b.update(only_last_n=39),
+            lambda b: b.update(score_last_n=39),
             lambda b: b.update(threshold=float("nan")),
             lambda b: b.update(threshold=0),
             lambda b: b.update(model="other"),
@@ -127,6 +127,16 @@ class EngineTests(unittest.TestCase):
         body["inputs"][0]["targets"].append([20.0] * 32 + [999.0] * 8)
         self.engine.run(body, "anomalies")
         self.assertNotIn(999, self.model.calls[0]["targets"][1])
+
+    def test_udf_model_selection_from_environment(self):
+        response = {"predictions": [self.model.predict({"targets": [[10.0] * 8]}, 2)]}
+        with patch.dict("os.environ", {"TIMESERIES_MODEL": "timestral-209m"}), patch(
+            "urllib.request.build_opener"
+        ) as opener:
+            opener.return_value.open.return_value.__enter__.return_value.read.return_value = json.dumps(response).encode()
+            evaluate({"values": [10.0] * 8, "horizon": 2}, "forecast", "http://localhost:8091", "key")
+        request = opener.return_value.open.call_args.args[0]
+        self.assertEqual(json.loads(request.data)["model"], "timestral-209m")
 
 
 if __name__ == "__main__":
