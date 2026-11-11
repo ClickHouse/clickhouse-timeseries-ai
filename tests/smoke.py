@@ -44,7 +44,7 @@ multi = request("forecast", horizon=4, inputs=[{
 }])
 assert len(multi["predictions"][0]["expected"]) == 2
 values[60] = 100
-anomalies = request("anomalies", horizon=4, only_last_n=4, inputs=[{"targets": [values]}])
+anomalies = request("anomalies", horizon=4, score_last_n=4, inputs=[{"targets": [values]}])
 prediction = anomalies["predictions"][0]
 assert prediction["expected"][0][:60] == [None] * 60
 assert prediction["is_anomaly"][0][60]

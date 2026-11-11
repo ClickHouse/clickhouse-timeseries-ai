@@ -128,8 +128,20 @@ string; use `'{}'` for defaults:
 |---|---|---|
 | `warmup` | 32 | Initial context-only observations, minimum 8 |
 | `horizon` | 16 | Number of observations forecast in each held-out window |
-| `only_last_n` | 0 | Score only the last N observations; 0 scores all after warmup |
+| `score_last_n` | 0 | Score only the last N observations; 0 scores all after warmup |
 | `threshold` | 1.0 | Flag scores strictly greater than this positive value |
+| `past_covariates` | `[]` | Feature arrays available only before each scored window |
+| `future_covariates` | `[]` | Feature arrays known in advance, including the scored window |
+
+`score_last_n` selects which observations receive scores; it does not truncate
+the preceding model history. Covariates are nested numeric arrays, with one
+inner array per feature and the same length as `values`. The service supplies
+past-only features through each forecast origin and known-future features
+through the end of that scored window. Held-out target values are not model
+inputs. The function returns one flat array of anomaly tuples.
+
+SQL can build covariate options with `toJSONString` on a named tuple; see
+the calendar-aware request in `tests/smoke.sql`.
 
 The bounds are q10 and q90: a **nominal 80% prediction interval**, not a calibrated
 confidence guarantee. The anomaly score divides the absolute forecast error by
@@ -167,8 +179,10 @@ the server's startup selection: `"timesfm-3.0"` or `"timestral-209m"`. For the
 Timestral server, replace the model value in `examples/forecast.json` when making
 a direct HTTP request. The other request and response fields are unchanged.
 For anomaly requests, known-future covariates cover the submitted history only.
-Anomaly options use the same names as the SQL JSON options and go at the request
-top level. The median and convenience bounds are `[target][step]` matrices.
+Scoring options (`score_last_n`, `warmup`, `horizon`, and `threshold`) use the
+same names as the SQL JSON options and go at the request top level. Covariates
+belong inside each `inputs` entry. The median and convenience bounds are
+`[target][step]` matrices.
 Forecast predictions also include `quantile_levels` and a numeric `quantiles`
 array shaped `[target][step][quantile]`. Anomaly predictions retain their original
 shape and do not expose the quantile cube. Responses identify the exact
@@ -283,9 +297,10 @@ docker compose exec -T clickhouse clickhouse-client --multiquery < tests/smoke.s
 docker compose exec -T -e TIMESERIES_CLICKHOUSE_URL=http://127.0.0.1:8123 clickhouse python3 - < tests/check_helpers.py
 ```
 
-The SQL smoke prints five zeroes on success. It checks forecasts, native quantile
+The SQL smoke prints six zeroes on success. It checks forecasts, native quantile
 and interval selection, multivariate
-forecasts with covariates, trailing anomaly scoring, and historical scoring.
+forecasts with covariates, trailing anomaly scoring, historical scoring, and
+anomaly scoring with past-only and known-future features.
 These are functional checks, not accuracy or performance benchmarks. GitHub
 Actions runs unit tests and validates Compose configuration without downloading
 model weights.

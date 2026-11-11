@@ -20,9 +20,22 @@ SELECT throwIf(length(prediction) != 2 OR arrayExists(c -> length(c) != 4, predi
 
 WITH aiDetectAnomalies(
     arrayMap(x -> if(x = 60, 100.0, 10.0 + sin(x / 5.0)), range(64)),
-    '{"only_last_n":4,"horizon":4}'
+    '{"score_last_n":4,"horizon":4}'
 ) AS prediction
 SELECT throwIf(length(prediction) != 64 OR arrayCount(p -> isNotNull(p.expected), prediction) != 4 OR prediction[61].is_anomaly != 1, 'invalid trailing anomaly result');
 
 WITH aiDetectAnomalies(arrayMap(x -> 10.0 + sin(x / 5.0), range(64)), '{"horizon":16}') AS prediction
 SELECT throwIf(length(prediction) != 64 OR arrayCount(p -> isNotNull(p.expected), prediction) != 32, 'invalid historical anomaly result');
+
+WITH aiDetectAnomalies(
+    arrayMap(x -> if(x = 60, 100.0, 10.0 + sin(x / 5.0)), range(64)),
+    toJSONString(CAST(
+        (4, 4, 3,
+         [arrayMap(x -> toFloat64(x % 7), range(64))],
+         [arrayMap(x -> toFloat64(x % 7 < 2), range(64))]),
+        'Tuple(score_last_n UInt32, horizon UInt32, threshold Float64, past_covariates Array(Array(Float64)), future_covariates Array(Array(Float64)))'
+    ))
+) AS prediction
+SELECT throwIf(length(prediction) != 64
+    OR arrayCount(p -> isNotNull(p.expected), prediction) != 4
+    OR prediction[61].is_anomaly != 1, 'invalid anomaly result with covariates');

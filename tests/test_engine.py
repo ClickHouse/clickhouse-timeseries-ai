@@ -54,7 +54,7 @@ class EngineTests(unittest.TestCase):
 
     def test_trailing_window_and_partial_final_window(self):
         body = self.body()
-        body["only_last_n"] = 5
+        body["score_last_n"] = 5
         result = self.engine.run(body, "anomalies")["predictions"][0]
         self.assertEqual([len(c["targets"][0]) for c in self.model.calls], [35, 39])
         self.assertEqual(result["expected"][0][:35], [None] * 35)
@@ -64,7 +64,7 @@ class EngineTests(unittest.TestCase):
         mutations = [
             lambda b: b.update(horizon=0),
             lambda b: b.update(horizon=True),
-            lambda b: b.update(only_last_n=39),
+            lambda b: b.update(score_last_n=39),
             lambda b: b.update(threshold=float("nan")),
             lambda b: b.update(threshold=0),
             lambda b: b.update(model="other"),

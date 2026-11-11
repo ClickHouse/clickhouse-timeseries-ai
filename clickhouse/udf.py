@@ -8,25 +8,32 @@ import urllib.request
 
 
 def evaluate(row, operation, endpoint, key):
-    if operation == "forecast":
-        targets = [row["values"]]
-        item = {"targets": targets}
-        options = {"horizon": row["horizon"]}
-    elif operation == "multivariate":
+    multivariate = operation == "multivariate"
+    anomalies = operation == "anomalies"
+    if operation not in ("forecast", "multivariate", "anomalies"):
+        raise ValueError("unsupported UDF operation")
+    if multivariate:
         targets = row["targets"]
         item = {
             "targets": targets,
             "past_covariates": row["past_covariates"],
             "future_covariates": row["future_covariates"],
         }
-        options = {"horizon": row["horizon"]}
     else:
         targets = [row["values"]]
         item = {"targets": targets}
+    if anomalies:
         options = json.loads(row["options"])
-        if not isinstance(options, dict) or set(options) - {"horizon", "warmup", "only_last_n", "threshold"}:
+        if not isinstance(options, dict) or set(options) - {
+            "horizon", "warmup", "score_last_n", "threshold", "past_covariates", "future_covariates",
+        }:
             raise ValueError("unsupported anomaly options")
-    route = "anomalies" if operation == "anomalies" else "forecast"
+        for name in ("past_covariates", "future_covariates"):
+            if name in options:
+                item[name] = options.pop(name)
+    else:
+        options = {"horizon": row["horizon"]}
+    route = "anomalies" if anomalies else "forecast"
     body = {"model": os.environ.get("TIMESERIES_MODEL", "timesfm-3.0"), "inputs": [item], **options}
     request = urllib.request.Request(
         endpoint.rstrip("/") + "/v1/timeseries/" + route,
@@ -58,7 +65,7 @@ def evaluate(row, operation, endpoint, key):
                 if len(values) != len(levels):
                     raise ValueError("quantile levels and values do not match")
                 point["quantiles"] = [{"level": level, "value": value} for level, value in zip(levels, values)]
-    return rows if operation == "multivariate" else rows[0]
+    return rows if multivariate else rows[0]
 
 
 def main():
